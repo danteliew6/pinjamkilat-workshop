@@ -35,19 +35,27 @@ No CLI install, no Terraform, no DAB required for attendees.
 ## Attendee install — one-time
 
 1. In your workspace, open the **Workspace** browser → click your username → **Import** → **URL**.
-2. Paste:
-   ```
-   https://raw.githubusercontent.com/<owner>/pinjamkilat-workshop/main/notebooks/00_setup.py
-   ```
-3. Click **Import**. Repeat for notebooks 1–4 (or just import them as you go).
-4. Open `00_setup.py` and **Run All**. It creates `workshop.{bronze,silver,gold}` and populates bronze.
+2. Paste each notebook URL (one at a time, or all five up front):
+
+   | # | Import URL |
+   |---|---|
+   | 0 | `https://raw.githubusercontent.com/dante-liew_data/pinjamkilat-workshop/main/notebooks/00_setup.py` |
+   | 1 | `https://raw.githubusercontent.com/dante-liew_data/pinjamkilat-workshop/main/notebooks/01_ai_extract_kyc.py` |
+   | 2 | `https://raw.githubusercontent.com/dante-liew_data/pinjamkilat-workshop/main/notebooks/02_ai_classify_risk.py` |
+   | 3 | `https://raw.githubusercontent.com/dante-liew_data/pinjamkilat-workshop/main/notebooks/03_silver_gold_decisioning.py` |
+   | 4 | `https://raw.githubusercontent.com/dante-liew_data/pinjamkilat-workshop/main/notebooks/04_risk_genie.py` |
+
+   > The repo is currently **private**. To let attendees use raw-URL import, flip it to public:
+   > `gh repo edit dante-liew_data/pinjamkilat-workshop --visibility public --accept-visibility-change-consequences`
+
+3. Open `00_setup.py` and **Run All**. It creates `workshop.{bronze,silver,gold}` and populates bronze.
 
 ## Maintainer install — DAB
 
 If you'd rather deploy from a clone:
 
 ```bash
-git clone https://github.com/<owner>/pinjamkilat-workshop.git
+git clone https://github.com/dante-liew_data/pinjamkilat-workshop.git
 cd pinjamkilat-workshop
 # Set DATABRICKS_TF_EXEC_PATH if you hit the Terraform GPG issue.
 databricks bundle deploy -t dev -p <your-profile>
