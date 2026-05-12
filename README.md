@@ -78,9 +78,7 @@ pinjamkilat-workshop/
 │   ├── 03_silver_gold_decisioning.py
 │   ├── 04_applicant_360_features.py
 │   └── 05_risk_genie.py
-├── data/                        # (optional) sample static reference files
-└── docs/
-    └── WORKSHOP_RUNBOOK.md      # presenter runbook with timing + cues
+└── data/                        # (optional) sample static reference files
 ```
 
 ## Key design choices
