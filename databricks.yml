@@ -1,0 +1,20 @@
+bundle:
+  name: pinjamkilat-workshop
+
+include:
+  - resources/*.yml
+
+variables:
+  catalog:
+    description: Unity Catalog for all workshop assets
+    default: workshop
+  warehouse_id:
+    description: Serverless SQL warehouse for AI Functions + Genie
+    default: 6f64729f1845a7de
+
+targets:
+  dev:
+    default: true
+    mode: development
+    workspace:
+      profile: dante-demo-env

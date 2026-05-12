@@ -1,0 +1,16 @@
+# Bundle state
+.databricks/
+.databricks-bundle.lock
+
+# macOS
+.DS_Store
+
+# Editor scratch
+.vscode/
+.idea/
+*.swp
+
+# Python
+__pycache__/
+*.pyc
+.venv/
