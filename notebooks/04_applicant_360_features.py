@@ -125,25 +125,9 @@ display(spark.sql(f"SELECT * FROM {CATALOG}.silver.transaction_features ORDER BY
 
 # COMMAND ----------
 
-# MAGIC %md ## 🙋 Your Turn — add a "savings_velocity" feature
+# MAGIC %md ## (Presenter step) Wrap with a view that adds `savings_velocity_idr`
 # MAGIC
-# MAGIC Real lenders care about whether an applicant is **accumulating** money or **bleeding** it. Add one more column:
-# MAGIC
-# MAGIC `savings_velocity_idr` = `(total_salary_idr + total_nonsalary_credit_idr) - total_debit_idr`, divided by `n_months_observed`.
-# MAGIC
-# MAGIC Positive → accumulating savings. Negative → spending more than earning.
-
-# COMMAND ----------
-
-# YOUR TURN — write the ALTER + UPDATE, or rebuild the table with the new column.
-# Hint: ALTER TABLE ... ADD COLUMN + a follow-up UPDATE; or wrap the existing table in a view.
-
-
-# COMMAND ----------
-
-# MAGIC %md ### ✅ Solution
-# MAGIC
-# MAGIC We add a view (cheaper than re-materialising) and put the column comment in too.
+# MAGIC Net monthly cash flow = `(salary + other credits − debits) / months`. Positive = accumulating; negative = bleeding cash. This is the kind of derived feature gold views typically expose — we wrap rather than re-materialise.
 
 # COMMAND ----------
 
@@ -165,11 +149,34 @@ SELECT *,
 FROM {CATALOG}.silver.transaction_features
 """)
 
+# COMMAND ----------
+
+# MAGIC %md ## 🙋 Your Turn #1 — find the worst spenders
+# MAGIC
+# MAGIC Use `v_transaction_features` to list the top 10 applicants by **lowest** `savings_velocity_idr` (i.e., the biggest cash bleeders). Just one `SELECT ... ORDER BY ... LIMIT`.
+
+# COMMAND ----------
+
+# YOUR TURN — write one SELECT
+# display(spark.sql(f"""
+# SELECT application_id, avg_monthly_salary_idr, avg_monthly_debit_idr, savings_velocity_idr
+# FROM {CATALOG}.silver.v_transaction_features
+# ORDER BY ...
+# LIMIT 10
+# """))
+
+
+# COMMAND ----------
+
+# MAGIC %md ### ✅ Solution
+
+# COMMAND ----------
+
 display(spark.sql(f"""
-SELECT application_id, avg_monthly_salary_idr, avg_monthly_debit_idr,
-       savings_velocity_idr, salary_consistency_score, expense_to_income_ratio
+SELECT application_id, avg_monthly_salary_idr, avg_monthly_debit_idr, savings_velocity_idr
 FROM {CATALOG}.silver.v_transaction_features
-ORDER BY savings_velocity_idr ASC   -- biggest spenders first
+WHERE savings_velocity_idr IS NOT NULL
+ORDER BY savings_velocity_idr ASC
 LIMIT 10
 """))
 
@@ -241,8 +248,7 @@ CREATE OR REPLACE VIEW {CATALOG}.gold.vw_applicant_360 (
   has_negative_call           COMMENT 'TRUE if any call was negative-sentiment.',
   risk_score                  COMMENT 'Composite risk score 0-100 from decisioning view. Higher = lower risk.',
   decision                    COMMENT 'APPROVE / REVIEW / REJECT.',
-  decision_reason_codes       COMMENT 'Array of reason codes that fired for this applicant.',
-  risk_narrative              COMMENT 'Bahasa one-line risk narrative from ai_query (suspicious cases only).'
+  decision_reason_codes       COMMENT 'Array of reason codes that fired for this applicant.'
 )
 COMMENT 'Applicant 360 — one row per applicant joining decisioning, transaction features, and call summary. Second main view for the Genie space. Use this for behavioural / financial / declared-vs-observed questions; use vw_application_decisioning for raw rules-and-decision questions.'
 AS
@@ -272,8 +278,7 @@ SELECT
   cs.has_negative_call,
   d.risk_score,
   d.decision,
-  d.decision_reason_codes,
-  d.risk_narrative
+  d.decision_reason_codes
 FROM {CATALOG}.gold.vw_application_decisioning d
 LEFT JOIN {CATALOG}.silver.v_transaction_features tf USING (application_id)
 LEFT JOIN {CATALOG}.silver.call_summary           cs USING (application_id)
@@ -317,18 +322,22 @@ print("\n✓ Data-quality checks pass.")
 
 # COMMAND ----------
 
-# MAGIC %md ## 🙋 Your Turn — add a data-quality check
+# MAGIC %md ## 🙋 Your Turn #2 — flag the over-declarers
 # MAGIC
-# MAGIC Write a check that confirms: **for every REJECT decision, `decision_reason_codes` is non-empty.** A `REJECT` with no reason is a governance / audit-trail bug. Use `assert` to fail loudly.
+# MAGIC `declared_vs_observed_pct` compares what the applicant *said* on the form vs what their bank-statement transactions actually show. **Over 200 means they declared 2× or more their observed salary** — high-priority verification cohort.
+# MAGIC
+# MAGIC Write one `SELECT` over `gold.vw_applicant_360` that returns them, with their decision, sorted by the worst offenders first.
 
 # COMMAND ----------
 
-# YOUR TURN — write the check below
-# offending = spark.sql(f"""
+# YOUR TURN
+# display(spark.sql(f"""
 # SELECT ...
-# """).count()
-# print(f"REJECTs missing reason codes: {offending}")
-# assert ...
+# FROM {CATALOG}.gold.vw_applicant_360
+# WHERE ...
+# ORDER BY ...
+# LIMIT 10
+# """))
 
 
 # COMMAND ----------
@@ -337,15 +346,20 @@ print("\n✓ Data-quality checks pass.")
 
 # COMMAND ----------
 
-offending = spark.sql(f"""
-SELECT COUNT(*) AS bad
+display(spark.sql(f"""
+SELECT applicant_name, kabupaten,
+       declared_income_idr, observed_avg_salary_idr, declared_vs_observed_pct,
+       decision
 FROM {CATALOG}.gold.vw_applicant_360
-WHERE decision = 'REJECT'
-  AND (decision_reason_codes IS NULL OR SIZE(decision_reason_codes) = 0)
-""").collect()[0]["bad"]
-print(f"REJECTs missing reason codes: {offending}")
-assert offending == 0, f"{offending} REJECTs have no reason codes — audit-trail violation"
-print("✓ Every REJECT has a reason code.")
+WHERE declared_vs_observed_pct > 200
+ORDER BY declared_vs_observed_pct DESC
+LIMIT 10
+"""))
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC **Takeaway:** the value of joining transaction features into a gold view is that *cohort discovery* becomes a one-line query. No model needed for this signal — just structured columns the AI Functions populated upstream.
 
 # COMMAND ----------
 

@@ -224,30 +224,9 @@ LIMIT 12
 # COMMAND ----------
 
 # MAGIC %md
-# MAGIC ## 🙋 Your Turn #2 — clean the extracted income to a numeric column
+# MAGIC ## (Presenter step) Normalize `extracted_income_text` to a numeric column
 # MAGIC
-# MAGIC `extracted_income_text` is a string ("6000000", "6jt", "4-10jt", null). Write SQL that produces a numeric `extracted_income_idr` column. Use these rules:
-# MAGIC
-# MAGIC - Pure number → cast to BIGINT.
-# MAGIC - String ending in `jt` or `juta` → the first integer × 1,000,000.
-# MAGIC - Range like `4-10jt` → midpoint × 1,000,000.
-# MAGIC - Anything else → NULL.
-
-# COMMAND ----------
-
-# YOUR TURN — replace this with your cleaning logic
-# spark.sql(f"""
-# CREATE OR REPLACE VIEW {CATALOG}.silver.v_application_kyc_clean AS
-# SELECT *,
-#   CAST(NULL AS BIGINT) AS extracted_income_idr   -- replace with real logic
-# FROM {CATALOG}.silver.application_kyc
-# """)
-
-
-# COMMAND ----------
-
-# MAGIC %md
-# MAGIC ### ✅ Solution
+# MAGIC The model returns income in varied formats: `"6000000"`, `"10jt"`, `"4-10jt"`, `null`. A small SQL `CASE` over `RLIKE` patterns gives us a numeric `extracted_income_idr`. We'll *use* this column in later notebooks — no exercise here, this is plumbing.
 
 # COMMAND ----------
 
@@ -277,14 +256,80 @@ SELECT application_id, extracted_income_text, extracted_income_idr
 FROM {CATALOG}.silver.v_application_kyc_clean
 WHERE extracted_income_text IS NOT NULL
 ORDER BY application_id
-LIMIT 15
+LIMIT 10
 """))
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ## 🙋 Your Turn #2 — `ai_classify` vs `ai_extract`
+# MAGIC
+# MAGIC Look at `extracted_purpose_category` above — the values are all over the place: `"transportation"`, `"Biaya pernikahan"`, `"business"`, `"Konsolidasi utang kartu kredit"`. Useful, but **hard to aggregate** in a dashboard.
+# MAGIC
+# MAGIC `ai_classify(text, ARRAY(labels))` solves this: it forces the model to pick **one** label from a fixed list. Add a strict-label column to compare.
+# MAGIC
+# MAGIC **Your task:** fill in one `ai_classify` call. Allowed labels: `renovation`, `business`, `medical`, `education`, `debt_consolidation`, `vehicle`, `wedding`, `other`.
+
+# COMMAND ----------
+
+# YOUR TURN — fill in the ai_classify call.
+#
+# spark.sql(f"""
+# CREATE OR REPLACE VIEW {CATALOG}.silver.v_purpose_compared AS
+# SELECT application_id,
+#        purpose_freetext,
+#        extracted_purpose_category                AS freeform_label,
+#        ai_classify(  -- <-- fill this in
+#        )                                          AS strict_label
+# FROM {CATALOG}.silver.application_kyc
+# """)
+
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ### ✅ Solution
+
+# COMMAND ----------
+
+spark.sql(f"""
+CREATE OR REPLACE VIEW {CATALOG}.silver.v_purpose_compared AS
+SELECT application_id,
+       purpose_freetext,
+       extracted_purpose_category                AS freeform_label,
+       ai_classify(
+         purpose_freetext,
+         ARRAY('renovation','business','medical','education',
+               'debt_consolidation','vehicle','wedding','other')
+       )                                          AS strict_label
+FROM {CATALOG}.silver.application_kyc
+""")
+
+# Now compare. The free-form column has dozens of unique values; the strict
+# column has at most 8. The "Aha" is in this row count diff.
+display(spark.sql(f"""
+SELECT
+  (SELECT COUNT(DISTINCT freeform_label) FROM {CATALOG}.silver.v_purpose_compared) AS freeform_unique_labels,
+  (SELECT COUNT(DISTINCT strict_label)   FROM {CATALOG}.silver.v_purpose_compared) AS strict_unique_labels
+"""))
+
+display(spark.sql(f"""
+SELECT strict_label, COUNT(*) AS n
+FROM {CATALOG}.silver.v_purpose_compared
+GROUP BY strict_label
+ORDER BY n DESC
+"""))
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC **Takeaway:** `ai_extract` is freeform — great for *unknown* fields the model needs to discover. `ai_classify` is constrained — great when you already know the bucket list and need clean aggregation. Use them together.
 
 # COMMAND ----------
 
 # MAGIC %md
 # MAGIC ## ✅ Notebook complete
 # MAGIC
-# MAGIC You now have **`workshop.silver.application_kyc`** with structured KYC, occupation, and purpose fields plus **`v_application_kyc_clean`** with a numeric `extracted_income_idr`.
+# MAGIC You now have **`workshop.silver.application_kyc`** with structured KYC + occupation + purpose fields, **`v_application_kyc_clean`** with numeric `extracted_income_idr`, and **`v_purpose_compared`** showing the free-form-vs-constrained label trade-off.
 # MAGIC
-# MAGIC **Next:** `02_ai_classify_risk.py` — we classify employment stability and analyze call-center note sentiment.
+# MAGIC **Next:** `02_ai_classify_risk.py` — `ai_classify` employment stability + `ai_analyze_sentiment` on call notes.

@@ -342,24 +342,9 @@ print(f"  URL: {HOST}/genie/rooms/{GENIE_SPACE_ID}")
 
 # COMMAND ----------
 
-# MAGIC %md ## 🙋 Your Turn — ask a question programmatically
+# MAGIC %md ## Helper — `ask_genie()` (we'll use this for both your turn and the benchmark)
 # MAGIC
-# MAGIC Use the Genie Conversation API to ask a question and grab Genie's SQL response. This is the same pattern you'd use to embed Genie behind a custom UI or chatbot.
-
-# COMMAND ----------
-
-# YOUR TURN — call /api/2.0/genie/spaces/{sid}/start-conversation
-# and poll until message status is COMPLETED.
-#
-# Hint: the start-conversation endpoint takes {"content": "<question>"} and returns
-# {"conversation_id": ..., "message_id": ...}.
-# Then GET /api/2.0/genie/spaces/{sid}/conversations/{cid}/messages/{mid}
-# and read the 'attachments' field for the generated SQL + answer text.
-
-
-# COMMAND ----------
-
-# MAGIC %md ### ✅ Solution
+# MAGIC The Genie Conversation API is two HTTP calls: `start-conversation` then poll `messages/{id}` until the status flips to `COMPLETED`. We wrap it once.
 
 # COMMAND ----------
 
@@ -371,22 +356,38 @@ def ask_genie(space_id: str, question: str, timeout_sec: int = 90) -> dict:
         f"/api/2.0/genie/spaces/{space_id}/start-conversation",
         body={"content": question})
     cid, mid = body["conversation_id"], body["message_id"]
-    print(f"  conversation={cid}  message={mid}")
 
     deadline = time.time() + timeout_sec
     while time.time() < deadline:
         msg = w.api_client.do("GET",
             f"/api/2.0/genie/spaces/{space_id}/conversations/{cid}/messages/{mid}")
-        status = msg.get("status")
-        if status in ("COMPLETED", "FAILED"):
+        if msg.get("status") in ("COMPLETED", "FAILED"):
             return msg
         time.sleep(3)
     raise TimeoutError(f"Genie didn't respond within {timeout_sec}s")
 
+# COMMAND ----------
+
+# MAGIC %md ## 🙋 Your Turn — ask Genie a question of your own
+# MAGIC
+# MAGIC One line. Pick anything — *"top 5 occupations by approved loan IDR"*, *"average DBR by province"*, anything in Bahasa or English. Print the generated SQL.
+
+# COMMAND ----------
+
+# YOUR TURN — call ask_genie with your question.
+# answer = ask_genie(GENIE_SPACE_ID, "<your question here>")
+# for a in answer.get("attachments", []):
+#     if "query" in a: print("SQL:", a["query"].get("query"))
+#     if "text"  in a: print("ANSWER:", a["text"].get("content"))
+
+
+# COMMAND ----------
+
+# MAGIC %md ### ✅ Solution — one example
+
+# COMMAND ----------
 
 answer = ask_genie(GENIE_SPACE_ID, "Which kabupaten has the highest reject rate? Top 5.")
-
-# Pull out the SQL + the natural-language summary
 for a in answer.get("attachments", []):
     if "query" in a:
         print("\nGENERATED SQL:")
@@ -394,6 +395,11 @@ for a in answer.get("attachments", []):
     if "text" in a:
         print("\nANSWER:")
         print(a["text"].get("content", ""))
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC **Takeaway:** Genie is just a REST API behind the UI. Anything that talks HTTP can ask Genie — Streamlit/Dash apps, Slack bots, your team's BI chat layer. The column comments + `example_question_sqls` we configured above are what make the answers grounded.
 
 # COMMAND ----------
 
