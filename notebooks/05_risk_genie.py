@@ -65,6 +65,7 @@ import uuid
 # COMMAND ----------
 
 SAMPLE_QUESTIONS = [
+    # Decisioning-view questions
     "Show me applications rejected in the last 14 days, broken down by reason code.",
     "Aplikasi mana yang ter-flag karena pendapatan tidak konsisten minggu ini?",
     "Which kabupaten has the highest reject rate?",
@@ -72,8 +73,13 @@ SAMPLE_QUESTIONS = [
     "Show me REJECT applications where employment_stability is 'stable'.",
     "Average DBR by employment_type, only APPROVE applications.",
     "Distribution of decision by channel (APP / AGENT / BRANCH).",
-    "Berapa persen aplikasi BPJS — eh, maksudnya aplikasi dengan sentimen call negatif yang akhirnya di-REJECT?",
     "Which applicants have a risk_score below 30 and what's in their decision_reason_codes?",
+    # Applicant-360 questions (new behavioural + financial view)
+    "Show applicants who declared income more than 50% higher than observed bank salary.",
+    "Which approved applicants have negative savings velocity? (spending more than earning)",
+    "Top 10 applicants by salary_consistency_score (highest = most volatile income).",
+    "Average expense_to_income_ratio by employment_stability — APPROVE only.",
+    "Berapa banyak pemohon dengan declared_vs_observed_pct di bawah 80? (kemungkinan under-disclose)",
 ]
 
 INSTRUCTIONS = """\
@@ -102,6 +108,141 @@ def get_column_descriptions(table_fqn: str):
                      "description": [r["comment"] or ""]})
     return sorted(cols, key=lambda c: c["column_name"])
 
+# Certified Q->SQL pairs ("trusted examples"). Genie uses these as patterns
+# when answering similar questions. Each pair targets a different join shape
+# or aggregation style so Genie generalises.
+CERTIFIED_QUERIES = [
+    {
+        "question": "Top 5 kabupaten by reject rate (last 90 days).",
+        "sql": f"""
+WITH last90 AS (
+  SELECT kabupaten, decision
+  FROM {CATALOG}.gold.vw_application_decisioning
+  WHERE application_ts >= date_sub(current_date(), 90)
+)
+SELECT kabupaten,
+       COUNT(*) AS total_apps,
+       SUM(CASE WHEN decision = 'REJECT' THEN 1 ELSE 0 END) AS rejects,
+       ROUND(100.0 * SUM(CASE WHEN decision = 'REJECT' THEN 1 ELSE 0 END) / COUNT(*), 2) AS reject_pct
+FROM last90
+GROUP BY kabupaten
+HAVING COUNT(*) >= 5
+ORDER BY reject_pct DESC
+LIMIT 5""".strip(),
+    },
+    {
+        "question": "Which applicants declared income materially higher than observed bank-statement salary?",
+        "sql": f"""
+SELECT application_id, applicant_name, kabupaten,
+       declared_income_idr, observed_avg_salary_idr, declared_vs_observed_pct,
+       decision
+FROM {CATALOG}.gold.vw_applicant_360
+WHERE declared_vs_observed_pct > 150
+  AND observed_avg_salary_idr > 0
+ORDER BY declared_vs_observed_pct DESC
+LIMIT 25""".strip(),
+    },
+    {
+        "question": "Approval rate by employment_stability bucket.",
+        "sql": f"""
+SELECT employment_stability,
+       COUNT(*) AS n_apps,
+       SUM(CASE WHEN decision = 'APPROVE' THEN 1 ELSE 0 END) AS n_approved,
+       ROUND(100.0 * SUM(CASE WHEN decision = 'APPROVE' THEN 1 ELSE 0 END) / COUNT(*), 2) AS approve_pct
+FROM {CATALOG}.gold.vw_application_decisioning
+WHERE employment_stability IS NOT NULL
+GROUP BY employment_stability
+ORDER BY approve_pct DESC""".strip(),
+    },
+    {
+        "question": "Top reason codes triggering review (last 30 days).",
+        "sql": f"""
+WITH recent AS (
+  SELECT EXPLODE(decision_reason_codes) AS reason
+  FROM {CATALOG}.gold.vw_application_decisioning
+  WHERE decision = 'REVIEW'
+    AND application_ts >= date_sub(current_date(), 30)
+)
+SELECT reason, COUNT(*) AS n
+FROM recent
+GROUP BY reason
+ORDER BY n DESC""".strip(),
+    },
+    {
+        "question": "Applicants spending more than they earn (expense_to_income_ratio > 1) — by decision.",
+        "sql": f"""
+SELECT decision,
+       COUNT(*) AS n_apps,
+       ROUND(AVG(expense_to_income_ratio), 2) AS avg_ratio,
+       ROUND(AVG(savings_velocity_idr), 0) AS avg_savings_velocity_idr
+FROM {CATALOG}.gold.vw_applicant_360
+WHERE expense_to_income_ratio > 1
+GROUP BY decision
+ORDER BY n_apps DESC""".strip(),
+    },
+    {
+        "question": "Average requested loan amount by channel, only APPROVE.",
+        "sql": f"""
+SELECT channel,
+       COUNT(*) AS n_approved,
+       ROUND(AVG(requested_amount_idr), 0) AS avg_loan_idr,
+       ROUND(AVG(tenor_months), 1) AS avg_tenor_months
+FROM {CATALOG}.gold.vw_application_decisioning
+WHERE decision = 'APPROVE'
+GROUP BY channel
+ORDER BY avg_loan_idr DESC""".strip(),
+    },
+]
+
+# Benchmark questions — used to test Genie's accuracy. Each question has a
+# reference SQL answer. We run them after creating the space and compare.
+BENCHMARK_QUESTIONS = [
+    {
+        "question": "How many applications were rejected this month?",
+        "sql": f"""
+SELECT COUNT(*) AS n_rejected
+FROM {CATALOG}.gold.vw_application_decisioning
+WHERE decision = 'REJECT'
+  AND application_ts >= DATE_TRUNC('MONTH', current_date())""".strip(),
+    },
+    {
+        "question": "What is the overall approval rate across all applications?",
+        "sql": f"""
+SELECT ROUND(100.0 * SUM(CASE WHEN decision = 'APPROVE' THEN 1 ELSE 0 END) / COUNT(*), 2) AS approve_pct
+FROM {CATALOG}.gold.vw_application_decisioning""".strip(),
+    },
+    {
+        "question": "Which province has the most applications?",
+        "sql": f"""
+SELECT provinsi, COUNT(*) AS n
+FROM {CATALOG}.gold.vw_application_decisioning
+GROUP BY provinsi
+ORDER BY n DESC
+LIMIT 1""".strip(),
+    },
+    {
+        "question": "Show the top 3 applicants by salary_consistency_score (worst = highest score).",
+        "sql": f"""
+SELECT applicant_name, employment_stability, salary_consistency_score
+FROM {CATALOG}.gold.vw_applicant_360
+WHERE salary_consistency_score IS NOT NULL
+ORDER BY salary_consistency_score DESC
+LIMIT 3""".strip(),
+    },
+    {
+        "question": "Count applications with HIGH_DBR in their decision_reason_codes.",
+        "sql": f"""
+SELECT COUNT(*) AS n
+FROM {CATALOG}.gold.vw_application_decisioning
+WHERE ARRAY_CONTAINS(decision_reason_codes, 'HIGH_DBR')""".strip(),
+    },
+]
+
+def sql_to_list(s: str):
+    """Convert a multi-line SQL string into the list-of-lines format Genie expects."""
+    return [line + "\n" for line in s.split("\n")]
+
+
 serialized = {
     "version": 2,
     "config": {
@@ -111,20 +252,51 @@ serialized = {
     },
     "data_sources": {
         "tables": [
+            # Both gold views — kept sorted by identifier (Genie API requirement).
+            {
+                "identifier": f"{CATALOG}.gold.vw_applicant_360",
+                "description": [
+                    "ONE ROW PER APPLICANT. Behavioural / financial view joining "
+                    "decisioning, 12-month bank-transaction features, and call summary. "
+                    "Use this for questions about declared-vs-observed income, salary "
+                    "consistency, expense-to-income ratio, savings velocity, and "
+                    "transaction-derived risk signals."
+                ],
+                "column_configs": get_column_descriptions(f"{CATALOG}.gold.vw_applicant_360"),
+            },
             {
                 "identifier": f"{CATALOG}.gold.vw_application_decisioning",
                 "description": [
                     "ONE ROW PER APPLICATION. Combines AI-Function-derived signals "
                     "(employment stability, call sentiment, KYC extraction) with hard "
                     "banking rules (DBR, age, blacklist) into one decision per applicant. "
-                    "Primary view for risk-officer analytics."
+                    "Primary view for raw decisioning / rules questions."
                 ],
                 "column_configs": get_column_descriptions(f"{CATALOG}.gold.vw_application_decisioning"),
-            }
+            },
         ]
     },
     "instructions": {
-        "text_instructions": [{"id": uuid.uuid4().hex, "content": [INSTRUCTIONS]}]
+        "text_instructions": [{"id": uuid.uuid4().hex, "content": [INSTRUCTIONS]}],
+        # Genie API requires these arrays to be sorted by id.
+        "example_question_sqls": sorted([
+            {
+                "id": uuid.uuid4().hex,
+                "question": [cq["question"]],
+                "sql": sql_to_list(cq["sql"]),
+            }
+            for cq in CERTIFIED_QUERIES
+        ], key=lambda x: x["id"]),
+    },
+    "benchmarks": {
+        "questions": sorted([
+            {
+                "id": uuid.uuid4().hex,
+                "question": [bq["question"]],
+                "answer": [{"format": "SQL", "content": sql_to_list(bq["sql"])}],
+            }
+            for bq in BENCHMARK_QUESTIONS
+        ], key=lambda x: x["id"])
     },
 }
 
@@ -222,6 +394,79 @@ for a in answer.get("attachments", []):
     if "text" in a:
         print("\nANSWER:")
         print(a["text"].get("content", ""))
+
+# COMMAND ----------
+
+# MAGIC %md ## D) Benchmark runner — "is this prototype production-ready?"
+# MAGIC
+# MAGIC The space now ships with 5 benchmark questions (encoded in `benchmarks.questions`). A real production roll-out would run them on every Genie config change and gate deploys on a passing score.
+# MAGIC
+# MAGIC Here we:
+# MAGIC
+# MAGIC 1. Ask each benchmark question via the Conversation API.
+# MAGIC 2. Time it.
+# MAGIC 3. Capture the SQL Genie generated.
+# MAGIC 4. Run our reference SQL.
+# MAGIC 5. Compare row counts as a coarse correctness check.
+# MAGIC
+# MAGIC Caveat: row-count match is a shallow signal. Production grading should diff actual result sets or use an LLM-as-judge. This is the workshop version.
+
+# COMMAND ----------
+
+import time as _time
+
+results = []
+for bq in BENCHMARK_QUESTIONS:
+    t0 = _time.time()
+    msg = ask_genie(GENIE_SPACE_ID, bq["question"], timeout_sec=120)
+    elapsed = _time.time() - t0
+
+    genie_sql = None
+    for a in msg.get("attachments", []):
+        if "query" in a:
+            genie_sql = a["query"].get("query")
+            break
+
+    # Run the reference SQL ourselves
+    ref_rows = spark.sql(bq["sql"]).count()
+    # Run Genie's generated SQL (if any) and compare row counts
+    genie_rows = None
+    sql_ok = False
+    if genie_sql:
+        try:
+            genie_rows = spark.sql(genie_sql).count()
+            sql_ok = True
+        except Exception as e:
+            print(f"  ⚠ Genie SQL did not parse: {e}")
+
+    results.append({
+        "question": bq["question"],
+        "elapsed_s": round(elapsed, 2),
+        "genie_sql_runs": sql_ok,
+        "ref_rows": ref_rows,
+        "genie_rows": genie_rows,
+        "row_count_match": (genie_rows == ref_rows) if sql_ok else None,
+    })
+
+import pandas as pd
+results_df = pd.DataFrame(results)
+display(spark.createDataFrame(results_df))
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ### Reading the benchmark output
+# MAGIC
+# MAGIC - `elapsed_s` — wall-clock time per Genie question (includes model + SQL execution).
+# MAGIC - `genie_sql_runs` — TRUE if the SQL Genie generated parsed and ran on Spark.
+# MAGIC - `row_count_match` — coarse correctness check vs the reference SQL.
+# MAGIC
+# MAGIC For a real production deployment you'd:
+# MAGIC
+# MAGIC - Move benchmarks to a separate job that runs on every metadata change.
+# MAGIC - Replace row-count match with an actual result-set diff (sorted-set equality).
+# MAGIC - Track pass-rate per Genie config version + alert on regression.
+# MAGIC - Add latency SLOs (e.g., p95 < 8s for simple aggregate questions).
 
 # COMMAND ----------
 

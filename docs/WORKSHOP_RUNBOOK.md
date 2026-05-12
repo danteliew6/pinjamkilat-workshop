@@ -10,18 +10,25 @@
 - [ ] Send a single email with: the GitHub repo URL, the import-from-URL instructions, and your contact for day-of issues.
 - [ ] Optional: pre-import notebook `00_setup.py` into a shared folder so anyone who lags behind can clone it.
 
-## Day-of pacing — 2 hr 30 min
+## Day-of pacing — 3 hours (with 5-min mid-break)
 
 | Time | Block | What to do |
 |---|---|---|
 | 00:00 – 00:10 | Welcome + framing | One slide. Why digital lenders care about Databricks AI Functions + Genie. Acknowledge that we're synthetic-data-only ("Bank Demo Sejahtera / PinjamKilat"). |
-| 00:10 – 00:30 | **`00_setup.py`** | Have everyone import + Run All. While it runs, walk through what's in each table. Highlight the messy free-text — *that's what we're going to untangle*. |
-| 00:30 – 01:00 | **`01_ai_extract_kyc.py`** | Live-run the KTP extract together. Pause after the first display() — let people look at the JSON output. Then occupation extract. Then both Your Turn cells (give them 4 min each, then walk through the solution). |
-| 01:00 – 01:30 | **`02_ai_classify_risk.py`** | The crowd-pleaser. Demo `ai_analyze_sentiment` on a Bahasa call note. Then the *"stable on paper but negative call"* Your Turn — this is the workshop's "aha" moment. The `ai_query` narrative is the closer. |
-| 01:30 – 01:35 | **Break** | 5-min stretch / coffee. Tables/views from notebooks 1 & 2 are now built. |
-| 01:35 – 02:00 | **`03_silver_gold_decisioning.py`** | Now the rules. Frame as "AI signals + hard banking rules = audit-friendly decision". Run the SQL together; then the histogram-by-province Your Turn. |
-| 02:00 – 02:30 | **`04_risk_genie.py`** | Climax. Build the dashboard programmatically. Open the Genie URL — ask 2 questions live, one English + one Bahasa. End with the Conversation API Your Turn to show how Genie can be embedded behind a chatbot. |
-| 02:30 | Wrap | Show the gold view's column comments — *that's why Genie just worked*. Take questions. |
+| 00:10 – 00:30 | **`00_setup.py`** | Everyone imports + Run All. While it runs, walk through what's in each table. Highlight the messy free-text — *that's what we're going to untangle*. |
+| 00:30 – 01:00 | **`01_ai_extract_kyc.py`** | Live-run the KTP extract together. Pause after the first display() — let people look at the JSON output. Then occupation extract. Then both Your Turn cells (4 min each, then walk through). |
+| 01:00 – 01:30 | **`02_ai_classify_risk.py`** | Crowd-pleaser. Demo `ai_analyze_sentiment` on a Bahasa call note. Then the *"stable on paper but negative call"* Your Turn — workshop's "aha" moment. The `ai_query` narrative is the closer. |
+| 01:30 – 01:35 | **Break** | 5-min stretch. Tables/views from notebooks 1 & 2 are now built. |
+| 01:35 – 02:00 | **`03_silver_gold_decisioning.py`** | Rules + audit trail. Frame as "AI signals + hard banking rules = audit-friendly decision". Run the SQL together; histogram-by-province Your Turn. |
+| 02:00 – 02:25 | **`04_applicant_360_features.py`** | Data-engineering interlude. Walk through window-function tx aggregation + percentile features. Emphasize: **Genie can only answer questions about data it can see — feature engineering is what unlocks new questions**. If time-pressed, demo only (skip Your Turn cells). |
+| 02:25 – 03:05 | **`05_risk_genie.py`** | Climax. Build the dashboard programmatically. Open the Genie URL — ask 2 sample questions live (one English + one Bahasa). Walk through `example_question_sqls` (certified queries) + `benchmarks.questions` — *this is what makes the Genie space a production prototype, not a toy*. Run the benchmark cell live. |
+| 03:05 | Wrap | Show the gold view column comments — *that's why Genie works*. Take questions. |
+
+### If you only have 2.5 hr
+
+- Cut Module 4's Your Turn cells (still demo the view).
+- Skip the benchmark runner in Module 5 (mention it exists, point to the cell).
+- That recovers ~25 min.
 
 ## Demo questions to pre-warm in Genie
 

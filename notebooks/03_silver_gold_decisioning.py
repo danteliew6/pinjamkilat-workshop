@@ -120,8 +120,9 @@ WITH base AS (
 ),
 scored AS (
   SELECT *,
-    -- Reason codes — collect each firing rule
-    ARRAY_REMOVE(ARRAY(
+    -- Reason codes — collect each firing rule (FILTER removes NULL slots;
+    -- ARRAY_REMOVE(arr, NULL) doesn't work — NULL = NULL is unknown).
+    FILTER(ARRAY(
       CASE WHEN age_years < 21 OR age_years > 60 THEN 'AGE_OUT_OF_RANGE' END,
       CASE WHEN dbr_pct > 50 THEN 'HIGH_DBR' END,
       CASE WHEN is_blacklisted THEN 'BLACKLIST_MATCH' END,
@@ -133,7 +134,7 @@ scored AS (
            THEN 'REFINANCE_PURPOSE' END,
       CASE WHEN LOWER(purpose_urgency) RLIKE '(urgent|urgen|mendesak|cepat)'
            THEN 'URGENT_REQUEST' END
-    ), NULL) AS decision_reason_codes,
+    ), x -> x IS NOT NULL) AS decision_reason_codes,
     -- Score
     100
       - CASE WHEN dbr_pct > 50 THEN 40 ELSE 0 END
