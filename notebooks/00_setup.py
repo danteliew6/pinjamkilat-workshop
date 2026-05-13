@@ -397,4 +397,4 @@ LIMIT 10
 # MAGIC | `workshop.bronze.transaction` | ~50,000 | 12 months of bank-statement transactions per applicant |
 # MAGIC | `workshop.bronze.call_note` | ~9,000 | Call-center verification notes in Bahasa/English |
 # MAGIC
-# MAGIC **Next:** open **`01_ai_extract_kyc.py`** — we'll use `ai_extract` to turn that messy text into structured KYC fields.
+# MAGIC **Next:** open **`01_medallion_etl.py`** — we exercise plain Delta + medallion patterns (no AI yet) before adding AI Functions on top.

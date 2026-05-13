@@ -220,4 +220,4 @@ spark.sql(f"SELECT COUNT(*) AS rows FROM {CATALOG}.silver.v_application_risk_sig
 # MAGIC
 # MAGIC All joined into **`workshop.silver.v_application_risk_signals`**.
 # MAGIC
-# MAGIC **Next:** `03_silver_gold_decisioning.py` — turn signals into a decision.
+# MAGIC **Next:** `04_silver_gold_decisioning.py` — turn signals into a decision.

@@ -374,4 +374,4 @@ LIMIT 10
 # MAGIC - `workshop.silver.call_summary`
 # MAGIC - **`workshop.gold.vw_applicant_360`** — the second view we'll expose to Genie next.
 # MAGIC
-# MAGIC **Next:** `05_risk_genie.py` — register both views in Genie, add certified SQL examples, and benchmark.
+# MAGIC **Next:** `06_risk_genie.py` — register both views in Genie, add certified SQL examples, and benchmark.

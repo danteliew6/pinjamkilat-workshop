@@ -2,36 +2,41 @@ resources:
   jobs:
     workshop_full_run:
       name: "[${bundle.target}] PinjamKilat Workshop — Full Run"
-      description: "Runs all 6 workshop notebooks end-to-end. Useful for sanity checks and refresh."
+      description: "Runs all 7 workshop notebooks end-to-end. Useful for sanity checks and refresh."
       tasks:
         - task_key: setup
           notebook_task:
             notebook_path: ../notebooks/00_setup.py
           environment_key: default
-        - task_key: ai_extract_kyc
+        - task_key: medallion_etl
           depends_on: [{task_key: setup}]
           notebook_task:
-            notebook_path: ../notebooks/01_ai_extract_kyc.py
+            notebook_path: ../notebooks/01_medallion_etl.py
+          environment_key: default
+        - task_key: ai_extract_kyc
+          depends_on: [{task_key: medallion_etl}]
+          notebook_task:
+            notebook_path: ../notebooks/02_ai_extract_kyc.py
           environment_key: default
         - task_key: ai_classify_risk
           depends_on: [{task_key: ai_extract_kyc}]
           notebook_task:
-            notebook_path: ../notebooks/02_ai_classify_risk.py
+            notebook_path: ../notebooks/03_ai_classify_risk.py
           environment_key: default
         - task_key: decisioning
           depends_on: [{task_key: ai_classify_risk}]
           notebook_task:
-            notebook_path: ../notebooks/03_silver_gold_decisioning.py
+            notebook_path: ../notebooks/04_silver_gold_decisioning.py
           environment_key: default
         - task_key: applicant_360
           depends_on: [{task_key: decisioning}]
           notebook_task:
-            notebook_path: ../notebooks/04_applicant_360_features.py
+            notebook_path: ../notebooks/05_applicant_360_features.py
           environment_key: default
         - task_key: risk_genie
           depends_on: [{task_key: applicant_360}]
           notebook_task:
-            notebook_path: ../notebooks/05_risk_genie.py
+            notebook_path: ../notebooks/06_risk_genie.py
           environment_key: default
       environments:
         - environment_key: default

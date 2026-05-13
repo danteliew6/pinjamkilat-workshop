@@ -17,11 +17,14 @@ A 2.5-hour hands-on workshop for **technical banking audiences**, built around a
 | # | Notebook | Time | What you'll do |
 |---|---|---|---|
 | 0 | [`00_setup.py`](notebooks/00_setup.py) | 20 min | Create UC catalog + schemas. Generate synthetic Indonesian loan applications (KTP OCR strings, Bahasa free-text application fields, call-center notes, 12-month transaction history). Land in `workshop.bronze`. |
-| 1 | [`01_ai_extract_kyc.py`](notebooks/01_ai_extract_kyc.py) | 30 min | `ai_extract` to pull `nik`, `place_of_birth`, `dob`, `gender` from messy KTP OCR strings + `occupation_category`, `employer_sector`, `income`, `tenure_years` from Bahasa application free-text. |
-| 2 | [`02_ai_classify_risk.py`](notebooks/02_ai_classify_risk.py) | 30 min | `ai_classify` employment stability + custom banking labels for call notes. `ai_analyze_sentiment` on call-center notes. Compose the two into a unified risk-signals view. |
-| 3 | [`03_silver_gold_decisioning.py`](notebooks/03_silver_gold_decisioning.py) | 25 min | Combine extracted + classified signals with hard rules (DBR, age, blacklist) into `workshop.gold.vw_application_decisioning`. One row per application with `risk_score`, `decision`, `decision_reason_codes`. |
-| 4 | [`04_applicant_360_features.py`](notebooks/04_applicant_360_features.py) | 25 min | Foundational data engineering: window-function aggregates over 12-month transactions, percentile-based features, CTEs, data-quality checks. Builds `workshop.gold.vw_applicant_360` — the second view Genie will see. |
-| 5 | [`05_risk_genie.py`](notebooks/05_risk_genie.py) | 40 min | Productionised Genie: both gold views, 6 certified Q→SQL pairs (`example_question_sqls`), 5 benchmark Q+A test cases, automated benchmark runner that times and grades Genie's responses. AI/BI dashboard included. |
+| 1 | [`01_medallion_etl.py`](notebooks/01_medallion_etl.py) | 25 min | **Data engineering fundamentals on Delta.** Inspect Delta metadata, build a typed silver table with `CREATE TABLE AS SELECT`, run an incremental `MERGE INTO`, exercise `DESCRIBE HISTORY` + `VERSION AS OF` for audit, run `OPTIMIZE … ZORDER BY`. No AI yet — pure Delta + Spark SQL. |
+| 2 | [`02_ai_extract_kyc.py`](notebooks/02_ai_extract_kyc.py) | 30 min | `ai_extract` to pull `nik`, `place_of_birth`, `dob`, `gender` from messy KTP OCR strings + `occupation_category`, `employer_sector`, `income`, `tenure_years` from Bahasa application free-text. |
+| 3 | [`03_ai_classify_risk.py`](notebooks/03_ai_classify_risk.py) | 30 min | `ai_classify` employment stability + custom banking labels for call notes. `ai_analyze_sentiment` on call-center notes. Compose the two into a unified risk-signals view. |
+| 4 | [`04_silver_gold_decisioning.py`](notebooks/04_silver_gold_decisioning.py) | 25 min | Combine extracted + classified signals with hard rules (DBR, age, blacklist) into `workshop.gold.vw_application_decisioning`. One row per application with `risk_score`, `decision`, `decision_reason_codes`. |
+| 5 | [`05_applicant_360_features.py`](notebooks/05_applicant_360_features.py) | 25 min | Foundational data engineering: window-function aggregates over 12-month transactions, percentile-based features, CTEs. Builds `workshop.gold.vw_applicant_360` — the second view Genie will see. |
+| 6 | [`06_risk_genie.py`](notebooks/06_risk_genie.py) | 40 min | Productionised Genie: both gold views, 6 certified Q→SQL pairs (`example_question_sqls`), 5 benchmark Q+A test cases, automated benchmark runner that times and grades Genie's responses. AI/BI dashboard included. |
+
+> Module 1 is **optional** if you're tight on time — the AI-Functions modules (2 and onwards) don't depend on the silver table built in module 1; they read directly from bronze. Skip it for a 2:30 workshop, keep it for the full 2:55 data-engineering-first experience.
 
 ## Prereqs (5 min, before workshop day)
 
@@ -41,11 +44,12 @@ No CLI install, no Terraform, no DAB required for attendees.
    | # | Import URL |
    |---|---|
    | 0 | `https://raw.githubusercontent.com/danteliew6/pinjamkilat-workshop/main/notebooks/00_setup.py` |
-   | 1 | `https://raw.githubusercontent.com/danteliew6/pinjamkilat-workshop/main/notebooks/01_ai_extract_kyc.py` |
-   | 2 | `https://raw.githubusercontent.com/danteliew6/pinjamkilat-workshop/main/notebooks/02_ai_classify_risk.py` |
-   | 3 | `https://raw.githubusercontent.com/danteliew6/pinjamkilat-workshop/main/notebooks/03_silver_gold_decisioning.py` |
-   | 4 | `https://raw.githubusercontent.com/danteliew6/pinjamkilat-workshop/main/notebooks/04_applicant_360_features.py` |
-   | 5 | `https://raw.githubusercontent.com/danteliew6/pinjamkilat-workshop/main/notebooks/05_risk_genie.py` |
+   | 1 | `https://raw.githubusercontent.com/danteliew6/pinjamkilat-workshop/main/notebooks/01_medallion_etl.py` |
+   | 2 | `https://raw.githubusercontent.com/danteliew6/pinjamkilat-workshop/main/notebooks/02_ai_extract_kyc.py` |
+   | 3 | `https://raw.githubusercontent.com/danteliew6/pinjamkilat-workshop/main/notebooks/03_ai_classify_risk.py` |
+   | 4 | `https://raw.githubusercontent.com/danteliew6/pinjamkilat-workshop/main/notebooks/04_silver_gold_decisioning.py` |
+   | 5 | `https://raw.githubusercontent.com/danteliew6/pinjamkilat-workshop/main/notebooks/05_applicant_360_features.py` |
+   | 6 | `https://raw.githubusercontent.com/danteliew6/pinjamkilat-workshop/main/notebooks/06_risk_genie.py` |
 
 3. Open `00_setup.py` and **Run All**. It creates `workshop.{bronze,silver,gold}` and populates bronze.
 
@@ -73,11 +77,12 @@ pinjamkilat-workshop/
 │   └── volumes.yml              # workshop.bronze.documents volume
 ├── notebooks/
 │   ├── 00_setup.py
-│   ├── 01_ai_extract_kyc.py
-│   ├── 02_ai_classify_risk.py
-│   ├── 03_silver_gold_decisioning.py
-│   ├── 04_applicant_360_features.py
-│   └── 05_risk_genie.py
+│   ├── 01_medallion_etl.py
+│   ├── 02_ai_extract_kyc.py
+│   ├── 03_ai_classify_risk.py
+│   ├── 04_silver_gold_decisioning.py
+│   ├── 05_applicant_360_features.py
+│   └── 06_risk_genie.py
 └── data/                        # (optional) sample static reference files
 ```
 

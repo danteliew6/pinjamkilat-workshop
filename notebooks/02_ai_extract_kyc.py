@@ -332,4 +332,4 @@ ORDER BY n DESC
 # MAGIC
 # MAGIC You now have **`workshop.silver.application_kyc`** with structured KYC + occupation + purpose fields, **`v_application_kyc_clean`** with numeric `extracted_income_idr`, and **`v_purpose_compared`** showing the free-form-vs-constrained label trade-off.
 # MAGIC
-# MAGIC **Next:** `02_ai_classify_risk.py` — `ai_classify` employment stability + `ai_analyze_sentiment` on call notes.
+# MAGIC **Next:** `03_ai_classify_risk.py` — `ai_classify` employment stability + `ai_analyze_sentiment` on call notes.

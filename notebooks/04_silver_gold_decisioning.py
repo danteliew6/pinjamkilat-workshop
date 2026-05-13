@@ -254,4 +254,4 @@ ORDER BY n_reject DESC
 # MAGIC
 # MAGIC One row per applicant with a full audit trail of why each decision was made. Genie reads this view next.
 # MAGIC
-# MAGIC **Next:** `04_risk_genie.py` — Genie + dashboard.
+# MAGIC **Next:** `05_applicant_360_features.py` — foundational data engineering: window functions, percentiles, and the applicant 360 view.
