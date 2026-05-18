@@ -489,48 +489,51 @@ display(spark.createDataFrame(results_df))
 
 def text_w(name, x, y, w, h, md):
     return {"widget": {"name": name, "textbox_spec": md},
-            "position": {"x": x, "y": y, "width": w, "height": h}}
+            "position": {"x": x*2, "y": y, "width": w*2, "height": h}}  # 12-col grid
 
-def counter_w(name, x, y, w, h, ds, field, display, fmt="number-plain"):
+def counter_w(name, x, y, w, h, ds, field, display, fmt=None):
+    spec_value = {"fieldName": field, "displayName": display}
+    if fmt is not None:
+        spec_value["format"] = {"type": fmt}
     return {"widget": {"name": name,
-        "queries": [{"name":"q","query":{"datasetName":ds,
+        "queries": [{"name":"main_query","query":{"datasetName":ds,
             "fields":[{"name":field,"expression":f"`{field}`"}],"disaggregated":True}}],
-        "spec":{"version":2,"widgetType":"counter","encodings":{
-            "value":{"fieldName":field,"displayName":display,"format":{"type":fmt}}}}},
-        "position":{"x":x,"y":y,"width":w,"height":h}}
+        "spec":{"version":2,"widgetType":"counter",
+            "encodings":{"value":spec_value},
+            "frame":{"showTitle":True,"title":display}}},
+        "position":{"x":x*2,"y":y,"width":w*2,"height":h}}  # 12-col grid
 
 def counter_pct(name, x, y, w, h, ds, field, display):
-    return {"widget": {"name": name,
-        "queries": [{"name":"q","query":{"datasetName":ds,
-            "fields":[{"name":field,"expression":f"`{field}`"}],"disaggregated":True}}],
-        "spec":{"version":2,"widgetType":"counter","encodings":{
-            "value":{"fieldName":field,"displayName":display,
-            "format":{"type":"number-percent","decimalPlaces":{"type":"max","places":1}}}}}},
-        "position":{"x":x,"y":y,"width":w,"height":h}}
+    return counter_w(name, x, y, w, h, ds, field, display, fmt="number-percent")
 
-def bar_w(name, x, y, w, h, ds, x_field, y_field, x_expr, y_expr, x_disp, y_disp,
-          color_field=None, color_expr=None):
-    fields = [{"name":x_field,"expression":x_expr},
-              {"name":y_field,"expression":y_expr}]
-    enc = {"x":{"fieldName":x_field,"displayName":x_disp,"scale":{"type":"categorical"}},
-           "y":{"fieldName":y_field,"displayName":y_disp,"scale":{"type":"quantitative"}}}
+# Bar: all aggregation already in dataset SQL (GROUP BY there). Widget uses
+# plain `field` refs + disaggregated:true (the working Lakeview convention).
+def bar_w(name, x, y, w, h, ds, x_field, y_field, x_disp, y_disp, title,
+          color_field=None):
+    fields = [{"name":x_field,"expression":f"`{x_field}`"},
+              {"name":y_field,"expression":f"`{y_field}`"}]
+    enc = {
+        "x":{"fieldName":x_field,"displayName":x_disp,"scale":{"type":"categorical"}},
+        "y":{"fieldName":y_field,"displayName":y_disp,"scale":{"type":"quantitative"}},
+        "label":{"show":True},
+    }
     if color_field:
-        fields.append({"name":color_field,"expression":color_expr})
+        fields.append({"name":color_field,"expression":f"`{color_field}`"})
         enc["color"] = {"fieldName":color_field,"displayName":color_field,"scale":{"type":"categorical"}}
     return {"widget":{"name":name,
-        "queries":[{"name":"q","query":{"datasetName":ds,"fields":fields,"disaggregated":False}}],
-        "spec":{"version":3,"widgetType":"bar","encodings":enc}},
-        "position":{"x":x,"y":y,"width":w,"height":h}}
+        "queries":[{"name":"main_query","query":{"datasetName":ds,"fields":fields,"disaggregated":True}}],
+        "spec":{"version":3,"widgetType":"bar","encodings":enc,
+            "frame":{"showTitle":True,"title":title}}},
+        "position":{"x":x*2,"y":y,"width":w*2,"height":h}}  # 12-col grid
 
-def table_w(name, x, y, w, h, ds, cols):
+def table_w(name, x, y, w, h, ds, cols, title=None):
     fields = [{"name": fn, "expression": f"`{fn}`"} for fn, _ in cols]
-    enc_cols = [{"fieldName": fn, "displayName": dn, "type": "string", "order": i}
-                for i, (fn, dn) in enumerate(cols)]
+    enc_cols = [{"fieldName": fn, "displayName": dn} for fn, dn in cols]
     return {"widget":{"name":name,
-        "queries":[{"name":"q","query":{"datasetName":ds,"fields":fields,"disaggregated":True}}],
-        "spec":{"version":1,"widgetType":"table","encodings":{"columns":enc_cols},
-        "invisibleColumns":[],"allowHTMLByDefault":False,"itemsPerPage":25}},
-        "position":{"x":x,"y":y,"width":w,"height":h}}
+        "queries":[{"name":"main_query","query":{"datasetName":ds,"fields":fields,"disaggregated":True}}],
+        "spec":{"version":2,"widgetType":"table","encodings":{"columns":enc_cols},
+            "frame":{"showTitle":True,"title":title or name}}},
+        "position":{"x":x*2,"y":y,"width":w*2,"height":h}}  # 12-col grid
 
 dashboard = {
     "datasets": [
@@ -543,9 +546,15 @@ dashboard = {
         {"name":"ds_reasons","displayName":"Reason codes",
          "queryLines":[f"WITH x AS (SELECT EXPLODE(decision_reason_codes) AS reason FROM {CATALOG}.gold.vw_application_decisioning WHERE decision IN ('REJECT','REVIEW')) SELECT reason, COUNT(*) AS n FROM x GROUP BY reason ORDER BY n DESC"]},
     ],
+    "uiSettings": {
+        "theme": {"widgetHeaderAlignment": "ALIGNMENT_UNSPECIFIED"},
+        "applyModeEnabled": False,
+    },
     "pages": [{
         "name": "page1",
         "displayName": "Risk Officer",
+        "layoutVersion": "GRID_V1",
+        "pageType": "PAGE_TYPE_CANVAS",
         "layout": [
             text_w("title", 0, 0, 6, 1,
                    "# 💳 PinjamKilat — Credit Risk Dashboard\n_Bank Demo Sejahtera · synthetic Indonesian digital-loan data_"),
@@ -555,11 +564,13 @@ dashboard = {
                    "## Decisions today\n\nUse the breakdowns below + the Genie space for drill-downs."),
             text_w("section_breakdowns", 0, 4, 6, 1, "## Breakdowns"),
             bar_w("by_province", 0, 5, 3, 5, "ds_by_province",
-                  "provinsi", "n", "`provinsi`", "SUM(`n`)",
+                  "provinsi", "n",
                   "Province", "Applications",
-                  color_field="decision", color_expr="`decision`"),
+                  "Decisions by province",
+                  color_field="decision"),
             table_w("reasons", 3, 5, 3, 5, "ds_reasons",
-                    [("reason","Reason code"), ("n","Count")]),
+                    [("reason","Reason code"), ("n","Count")],
+                    title="Reason codes"),
         ],
     }],
 }
